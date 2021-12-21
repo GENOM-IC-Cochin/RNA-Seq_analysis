@@ -1,0 +1,335 @@
+---
+title: "Projet NGSxx-xxx"
+author: "Plateforme GENOM'IC"
+output:
+  html_document: default
+  pdf_document: default
+bibliography: biblio.bib
+nocite: '@*'
+---
+
+## Logiciels et références
+
+Le pipeline de la plateforme utilise STAR (v2.7.6a) et RSEM (v1.3.1). Les résultats de comptage brut sont fournis par RSEM et exploités à l'aide du package R DESeq2.
+
+```
+STAR 
+--genomeDir /path/to/STAR/reference/directory 
+--sjdbGTFfile /path/to/gtf
+--runThreadN 20 
+--readFilesIn /path/to/fastq/R1 /path/to/fastq/R2 
+--outFileNamePrefix $echantillon 
+--twopassMode Basic 
+--sjdbOverhang 74 
+--outSAMtype BAM SortedByCoordinate 
+--readFilesCommand zcat 
+--outSAMunmapped Within 
+--outFilterType BySJout 
+--quantMode TranscriptomeSAM
+```
+```
+rsem-calculate-expression 
+-p 20 
+--paired-end 
+--bam 
+--no-bam-output 
+/path/to/AlignedToTranscriptome/file
+/path/to/rsem-prepare-reference/files
+[sample-rsem-suffix]
+```
+
+Pour votre projet, nous avons utilisé la référence suivante:
+
+> Ensembl release n, "ref_name"
+
+Les fichiers de séquences (fasta) et d'annotations (gtf) sont disponibles sur cette base de données. Merci de faire attention à la version utilisée dans le cadre d'une réanalyse complète des données ou d'une comparaison avec d'autres données.
+
+
+
+# Alignement
+
+```{r, echo=FALSE,fig.cap="Contrôle qualité de l'alignement",fig.show='hold',fig.align='center'}
+knitr::include_graphics("QC_STAR.png")
+``` 
+Les colonnes sont les suivantes:
+* Input: nombre de lectures issues du séquençage, par échantillon
+* UniquelyMapped: Pourcentage de lectures alignées de façon unique sur le génome de référence
+* MultipleMapped_upTo10: Pourcentages de lectures alignées sur n loci, n entre 2 et 10. Ces lectures sont néanmoins conservées lors de l'analyse gtâce à l'algorithme de RSEM.
+* TooManyLoci: Pourcentages de lectures alignées sur plus de 10 loci. Elles ne sont pas conservées pour le reste de l'analyse.
+* Unmapped_tooShort: Pourcentage de lectures qui se sont alignées sur moins de 60% de leur taille. Elles sont éliminées de l'analyse.
+* Unmapped_other: Pourcentage de lecture non-alignées et éliminées de l'analyse.
+
+L'ensemble de vos échantillons présentent de très bons contrôles qualités. Nous les validons et les prenons en compte pour la suite de l'analyse.
+
+# Analyses avec R
+
+
+```{r Préparation des fonction et connexion à biomaRt, include=FALSE, results="hide"}
+renv::restore()
+source("GenomIC_RNASeq-pipeline_functions.r")
+# ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 101)
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "mmusculus_gene_ensembl", version = 101)
+```
+
+```{r Préparation du titre et des fichiers de configuration, include=FALSE, results="hide"}
+confFile <- "PROJET.conf"
+contrastFile <- "PROJET.contrastes"
+projectName <- "NGSxx-xxx_ensemblRefName"
+```
+
+```{r Préparation des données brutes et de la configuration, include=FALSE, results="hide"}
+  currentDirectory <- getwd()
+ # Dans la commande suivante, ajuster le nombre de facteur dans les classes de colonnes
+  configuration <- read.table(confFile,header=TRUE,sep="\t",colClasses = c("character","character","factor"))
+  files <- file.path(currentDirectory, configuration$File)
+  names(files) <- configuration$Name
+  txi.rsem <- tximport(files, type = "rsem", txIn = FALSE, txOut = FALSE)
+  txi.rsem$length <- ifelse(txi.rsem$length==0,1,txi.rsem$length) # Setting the length to 1, to avoid error for the dds object
+
+```
+
+
+## Préparation des données et métadonnées
+
+Les métadonnées ont été configurées de la façon suivante:
+
+```{r paged.print=FALSE}
+configuration
+```
+
+
+## Création de l'objet DESeq
+
+Les données sont directement importés des fichiers de sortie RSEM. Le design experimental dépend à la fois des informations fournies pour chaque échantillon, et des comparaisons souhaitées.
+
+Nous filtrons une partie des données que nous considérons comme non-représentatives et qui peuvent présenter un risque de biais. Chaque gène doit avoir un comptage supèrieur à 10, et ce dans au moins 3 échantillons. Ces filtres expliquent les différences que vous pourrez observer entre les données brutes et la matrice normalisée.
+
+```{r dds, echo=FALSE}
+  dds <- DESeqDataSetFromTximport(txi.rsem, configuration, ~ Condition)
+  dds <- estimateSizeFactors(dds)
+  idx <- rowSums( counts(dds, normalized=TRUE) >= 10 ) >= 3
+  dds <- dds[idx,]
+  dds <- DESeq(dds)
+  summary(dds)
+```
+
+
+## Normalisation des données
+
+```{r Normalisation des donnees et sauvegarde, include=FALSE, results="hide"}
+
+  countNorm<-counts(dds, normalized=TRUE)
+  ensemblIDs <- row.names(countNorm)
+  
+  #Human
+  # IDsWithNamesDesc <- getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol','description','go_id','name_1006'), filters = 'ensembl_gene_id', values = ensemblIDs, mart = ensembl,useCache = FALSE)
+  
+  #Mouse
+  # IDsWithNamesDesc <- getBM(attributes = c('ensembl_gene_id', 'mgi_symbol','description','go_id','name_1006'), filters = 'ensembl_gene_id', values = ensemblIDs, mart = ensembl,useCache = FALSE)
+  
+  
+  rownames(IDsWithNamesDesc) <- make.names(IDsWithNamesDesc$ensembl_gene_id, unique=TRUE)
+  dataMerged <- merge(as.data.frame(countNorm),IDsWithNamesDesc,by="row.names",all.x=TRUE)
+  nameNorm <- paste(projectName,"_deseq2_NormalizedMatrix.tsv",sep="")
+  write.table(dataMerged,file=nameNorm,sep='\t',row.names=F)
+``` 
+
+La méthode de normalisation des données est interne au package DESeq2. Cette méthode normalise les données afin de pouvoir comparer les échantillons entre eux, en prenant en compte la profondeur de séquençage et la composition en ARN. 
+
+Attention! Ces données ne peuvent pas être utlisées pour comparer des expressions au sein d'un même échantillon. Si vous souhaitez effectuer de telles comparaisons, merci d'utiliser les colonnes TPM des fichiers bruts issus de RSEM.
+
+```{r Preparation des donnees pour les boxplot et sauvegarde, include=FALSE, results="hide"}
+  countNorm<-counts(dds, normalized=TRUE)
+  pseudoNormCount <- as.data.frame(log2(countNorm+1),row.names=row.names(countNorm))
+  pseudoNormCount$Ids <- row.names(pseudoNormCount)
+  datNorm <- melt(pseudoNormCount, id.vars = "Ids", variable.name = "Samples", value.name = "count")
+  colnames(datNorm)<-c("Ids", "Samples", "count")
+  datNorm <- merge(datNorm, configuration, by.x = "Samples", by.y = "Name")
+  
+  countRaw<-counts(dds, normalized=FALSE)
+  pseudoRawCount <- as.data.frame(log2(countRaw+1),row.names=row.names(countRaw))
+  pseudoRawCount$Ids <- row.names(pseudoRawCount)
+  datRaw <- melt(pseudoRawCount, id.vars = "Ids", variable.name = "Samples", value.name = "count")
+  colnames(datRaw)<-c("Ids", "Samples", "count")
+  datRaw <- merge(datRaw, configuration, by.x = "Samples", by.y = "Name")
+  
+    gDens <- ggplot(datNorm, aes(x = count, colour = Samples, fill = Samples)) + geom_density(alpha = 0.2, size = 1.25) + facet_wrap(~ Condition) + theme(legend.position = "top") + xlab(expression(log[2](count + 1)))
+  ggsave(filename=paste(projectName,"_DensityNormCount.jpg",sep=""), plot=gDens)
+  
+  gNorm <- ggplot(data = datNorm, aes(x = Samples, y = count, fill = Condition)) + geom_boxplot() + xlab("Samples") + ylab("log2(Count+1)") + ggtitle("Normalized log2(counts) per sample") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(filename=paste(projectName,"_boxplotNormCount.jpg",sep=""), plot=gNorm)
+  
+  gRaw <- ggplot(data = datRaw, aes(x = Samples, y = count, fill = Condition)) + geom_boxplot() + xlab("Samples") + ylab("log2(Count+1)") + ggtitle("Raw log2(counts) per sample") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(filename=paste(projectName,"_boxplotRawCount.jpg",sep=""), plot=gRaw)
+  
+``` 
+
+```{r, echo=FALSE,out.width="49%", out.height="20%",fig.cap="Effet de la normalisation des données",fig.show='hold',fig.align='center'}
+gRaw
+gNorm
+``` 
+
+Une fois les données normalisées, nous validons l'absence de profil atypique qui pourrait entrainer la suppression d'un ou plusieurs échantillons.
+
+## Analyses non supervisées
+
+### ACP
+
+```{r Preparation des donnees pour les ACP et sauvegarde, include=FALSE, results="hide"}
+  rld<- rlog(dds,blind=TRUE)
+
+  ntop <- 500
+  
+  rv <- rowVars(assay(rld))
+  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
+  mat <- t( assay(rld)[select, ] )
+  pc <- prcomp(mat)
+  eig <- (pc$sdev)^2
+  variance <- eig*100/sum(eig)
+  
+  PCAdata<-as.data.frame(pc$x[,1:3])
+  PCAdata$condition <- dds$Condition
+  PCAdata$Donneur <- dds$Donneur
+  
+  nameACP1 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes.jpg",sep="")
+  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
+  ggsave(filename=nameACP1, plot=pca1)
+  
+  nameACP2 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC2vsPC3_top500varGenes.jpg",sep="")
+  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
+  ggsave(filename=nameACP2, plot=pca2)
+
+  nameACP3 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC3_top500varGenes.jpg",sep="")
+  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
+  ggsave(filename=nameACP3, plot=pca3)
+  
+  nameACP_contrib <- paste(projectName,"_deseq2_Unsupervised_PCA_contribution.png",sep="")
+  contrib <- fviz_eig(pc)
+  ggsave(filename=nameACP_contrib, plot=contrib)
+```
+
+L'Analyse en Composantes Principales est une méthode de statistiques descriptives qui projette sur deux axes les échantillons en fonction de leur expression des 500 gènes les plus variable. Chaque axe est une composante d'un certain nombre de gènes. Les données utilisées ont subis une transformation `rld<- rlog(dds,blind=TRUE)` afin d'améliorer le clustering et modérer la variance autour de la moyenne.
+
+```{r, echo=FALSE,out.width="49%", out.height="20%",fig.cap="Analyse en Composantes Principales, n=500",fig.show='hold',fig.align='center'}
+pca1
+pca2
+pca3
+contrib
+``` 
+### Clustering
+
+```{r clustering, include=FALSE, results="hide"}
+
+  distsRL <- dist(t(assay(rld)))
+  matDist <- as.matrix(distsRL)
+  hmcol<- colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+  Conditions <- data.frame(configuration$Condition,row.names=configuration$Name)
+  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete.png",sep="_")
+  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
+  pheatmap(matDist, 
+           col=hmcol, 
+           annotation_col = Conditions,
+           show_rownames=F,
+           show_colnames=T)
+  dev.off()
+
+  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete_no-sampleNames.png",sep="_")
+  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
+  pheatmap(matDist, 
+           col=hmcol, 
+           annotation_col =  Conditions,
+           show_rownames=F,
+           show_colnames=F)
+  dev.off()
+
+```
+
+```{r, echo=FALSE,out.width="49%", out.height="20%",fig.cap="Clustering hiérarchique",fig.show='hold',fig.align='center'}
+  pheatmap(matDist, 
+           col=hmcol, 
+           annotation_col = Conditions,
+           show_rownames=F,
+           show_colnames=T)
+``` 
+
+Le clustering hérarchique présente des résultats cohérents avec les ACP présentées précédement. Nous avons utlisés la distance euclidienne et la méthode complète pour déterminer le dendogramme. Il est possible de changer les méthodes en nous contactant.
+
+## Analyses supervisées
+
+
+Une fois le design validé, nous utilisons la fonction `contrast` afin de garder un contrôle complet à la fois sur la comparaison, mais également pour faciliter la suite du script (génération des figures notamment). 
+
+L'hypothèse nulle spécifie qu'il n'existe pas de différence d'expression entre les deux groupes comparés, et cette hypothèse est vérifiée grâce à un test de Wald, qui fournit une statistique de test permettant d'établir une p-valeur pour chaque gène. Celle-ci indique la probablité d'obtenir une statistique de test au moins aussi extrême que la valeur observée. La p-valeur nous permet de conclure sur le rejet ou l'acceptation de l'hypothèse nulle.
+
+```{r Preparation des contrastes, include=FALSE, results="hide"}
+  contrasteList <- read.table(contrastFile,header=FALSE,sep="\t",colClasses = c("character","character","character"))
+  nComp <- nrow(contrasteList)
+```
+
+```
+res <- results(dds, contrast=c("Condition","Groupe A Comparer","Référence"))
+```
+
+```{r Resultats, include=FALSE, results="hide"}
+list_volcanoPlot <- c() 
+all_results <- vector(mode = "list", length = nComp)
+for (z in 1:nComp){
+    ctrst <- unname(unlist(contrasteList[z,]))
+    res <- results(dds, contrast=ctrst)
+    name <- paste(projectName,"deseq2_results_contrast",ctrst[2],'vs',ctrst[3],sep="_")
+    res <- merge(as.data.frame(res),IDsWithNamesDesc,by="row.names",all.x=TRUE)
+    row.names(res)<-res$Row.names
+    res<-res[,2:10]
+    fullData <- merge(as.data.frame(res),countNorm,by="row.names",all.x=TRUE)
+    row.names(fullData)<-fullData$Row.names
+    fullData<-fullData[order(fullData$padj), ]
+    all_results[[z]] <- fullData
+    names(all_results)[z] <- paste(ctrst[2], "vs", ctrst[3], sep = "_")
+    write.table(as.data.frame(fullData),file=paste(name,".tsv",sep=""),sep='\t',row.names=F)
+    volcano_plot <- make_nice_volcanoPlot(fullData,name,ctrst)
+    make_nice_diffPlot(dds,fullData,configuration,name,ctrst) 
+    list_volcanoPlot <- c(list_volcanoPlot,volcano_plot)  
+}
+save(dataMerged, rld, configuration, contrasteList, all_results, txi.rsem, file = "results.RData")
+```
+
+
+Plus de gènes sont testés, plus le taux de faux positifs est important (problème des tests multiples). Chaque p-valeur est donc ajustée avec la méthode Benjamini-Hochberg.
+
+En ajoutant les informations issues d'Ensembl via le package biomaRt, la matrice de résultats est complétée et fournie au format .tsv, lisible avec Excel ou n'importe quelle tableur.
+
+Exemple des 6 premières lignes de la matrice de résultats:
+
+```{r, paged.print=TRUE,echo=FALSE}
+paged_table(head(fullData),options = list(rownames.print=FALSE))
+```
+
+Les colonnes sont les suivantes:
+
+* Identifiant de la base de données Ensembl
+* Moyenne de comptage pour l'ensemble des échantillons, après normalisation
+* Log2 du ratio d'expression entre les groupes
+* Déviation standard 
+* Statistique du test de Wald
+* p-valeur brute
+* p-valeur ajustée
+* Identifiant de la base de données Ensembl
+* Gene Symbol, souvent plus parlant aux biologistes
+* Une description, si disponible, du gène
+* Ensemble des comptages normalisés pour les échantillons
+
+Un volcan plot est également fourni. Ceux-ci peuvent être modifiés en nous demandant.
+
+```{r, echo=FALSE,out.width="49%", out.height="20%",fig.cap="Exemple de volcano plot obtenu",fig.show='hold',fig.align='center'}
+knitr::include_graphics(list_volcanoPlot)
+```
+
+
+# Reproductibilité
+
+Concernant la reproductibilité des données, vous trouverez, dans le répertoire R, une archive qui contient un Renv et les codes utilisés, ainsi qu'un fichier results.RData, qui vous sera utile pour l'application de figures en ligne en cours de développement sur la plateforme.
+Voici également le résultat de la commande sessionInfo(), qui permet de s'assurer que vous retravaillerez bien dans un environnement R similaire.
+
+```{r, paged.print=TRUE}
+sessionInfo()
+```
