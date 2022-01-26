@@ -180,6 +180,16 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
   newdata$DEGs[newdata$log2FoldChange < -log2(1.5)] <- "DOWN"
   newdata$DEGs[newdata$log2FoldChange < -log2(1.5) & newdata$padj < 0.05] <- "DOWN & DE"
   
+  # Vérification des valeurs de DEGs et ajustement des couleurs en fonction
+  colorPoints <- c(
+    "DOWN & DE" = "blue3",
+    "UP & DE" = "firebrick2", 
+    "DOWN" = "#CCCCFF", 
+    "UP" = "#FFCCCC",
+    "NO" = "snow3" 
+  )
+  
+  
   nameVolcanoPlot<-paste(name,"_volcanoPlot.png",sep="")
   
   volcanoNoLabel<-ggplot(newdata) +
@@ -193,13 +203,13 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
     theme(plot.title = element_text(hjust = 0.5)) +
     geom_vline(xintercept=c(-log2(1.5), log2(1.5)), col="grey50",linetype=3) + 
     geom_hline(yintercept=-log10(0.05), col="grey50",linetype=3) +
-    scale_color_manual(values=c("#CCCCFF","blue3", "snow3", "#FFCCCC", "firebrick2"))
+    scale_color_manual(values = colorPoints,limits = names(colorPoints))
   
   ggsave(filename=nameVolcanoPlot, plot=volcanoNoLabel)
   
   top10DEG<-newdata[1:10,]
   
-  nameVolcanoPlot<-paste(name,"_volcanoPlot_Top10.png",sep="")
+  nameVolcanoPlotTop10<-paste(name,"_volcanoPlot_Top10.png",sep="")
   
   volcanoTop10<-ggplot(newdata) +
     aes(x = log2FoldChange, y = -log10(padj), colour = DEGs) +
@@ -212,10 +222,11 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
     theme(plot.title = element_text(hjust = 0.5)) +
     geom_vline(xintercept=c(-log2(1.5), log2(1.5)), col="grey50",linetype=3) + 
     geom_hline(yintercept=-log10(0.05), col="grey50",linetype=3) +
-    scale_color_manual(values=c("#CCCCFF","blue3", "snow3", "#FFCCCC", "firebrick2"))+
+    scale_color_manual(values = colorPoints,limits = names(colorPoints))+
     geom_label_repel(data=top10DEG, aes(label=GeneSymbol), color = 'black',show.legend=FALSE)
-  ggsave(filename=nameVolcanoPlot, plot=volcanoTop10)
+  ggsave(filename=nameVolcanoPlotTop10, plot=volcanoTop10)
   
+  return(nameVolcanoPlot)
   
 }
 
