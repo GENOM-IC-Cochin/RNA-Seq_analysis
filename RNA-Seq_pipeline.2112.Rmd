@@ -279,7 +279,7 @@ for (z in 1:nComp){
     name <- paste(projectName,"deseq2_results_contrast",ctrst[2],'vs',ctrst[3],sep="_")
     res <- merge(as.data.frame(res),IDsWithNamesDesc,by="row.names",all.x=TRUE)
     row.names(res)<-res$Row.names
-    res<-res[,2:13]
+    res<-res[,2:12]
     fullData <- merge(as.data.frame(res),countNorm,by="row.names",all.x=TRUE)
     row.names(fullData)<-fullData$Row.names
     fullData<-fullData[order(fullData$padj), ]
