@@ -52,12 +52,12 @@ Les fichiers de séquences (fasta) et d'annotations (gtf) sont disponibles sur c
 knitr::include_graphics("QC_STAR.png")
 ``` 
 Les colonnes sont les suivantes:
-* Input: nombre de lectures issues du séquençage, par échantillon
-* UniquelyMapped: Pourcentage de lectures alignées de façon unique sur le génome de référence
-* MultipleMapped_upTo10: Pourcentages de lectures alignées sur n loci, n entre 2 et 10. Ces lectures sont néanmoins conservées lors de l'analyse gtâce à l'algorithme de RSEM.
-* TooManyLoci: Pourcentages de lectures alignées sur plus de 10 loci. Elles ne sont pas conservées pour le reste de l'analyse.
-* Unmapped_tooShort: Pourcentage de lectures qui se sont alignées sur moins de 60% de leur taille. Elles sont éliminées de l'analyse.
-* Unmapped_other: Pourcentage de lecture non-alignées et éliminées de l'analyse.
+ * Input: nombre de lectures issues du séquençage, par échantillon
+ * UniquelyMapped: Pourcentage de lectures alignées de façon unique sur le génome de référence
+ * MultipleMapped_upTo10: Pourcentages de lectures alignées sur n loci, n entre 2 et 10. Ces lectures sont néanmoins conservées lors de l'analyse gtâce à l'algorithme de RSEM.
+ * TooManyLoci: Pourcentages de lectures alignées sur plus de 10 loci. Elles ne sont pas conservées pour le reste de l'analyse.
+ * Unmapped_tooShort: Pourcentage de lectures qui se sont alignées sur moins de 60% de leur taille. Elles sont éliminées de l'analyse.
+ * Unmapped_other: Pourcentage de lecture non-alignées et éliminées de l'analyse.
 
 L'ensemble de vos échantillons présentent de très bons contrôles qualités. Nous les validons et les prenons en compte pour la suite de l'analyse.
 
