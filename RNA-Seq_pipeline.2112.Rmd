@@ -279,7 +279,7 @@ for (z in 1:nComp){
     name <- paste(projectName,"deseq2_results_contrast",ctrst[2],'vs',ctrst[3],sep="_")
     res <- merge(as.data.frame(res),IDsWithNamesDesc,by="row.names",all.x=TRUE)
     row.names(res)<-res$Row.names
-    res<-res[,2:10]
+    res<-res[,2:13]
     fullData <- merge(as.data.frame(res),countNorm,by="row.names",all.x=TRUE)
     row.names(fullData)<-fullData$Row.names
     fullData<-fullData[order(fullData$padj), ]
@@ -316,6 +316,8 @@ Les colonnes sont les suivantes:
 * Identifiant de la base de données Ensembl
 * Gene Symbol, souvent plus parlant aux biologistes
 * Une description, si disponible, du gène
+* Information sur les GO Terms (1)
+* Information sur les GO Terms (2)
 * Ensemble des comptages normalisés pour les échantillons
 
 Un volcan plot est également fourni. Ceux-ci peuvent être modifiés en nous demandant.
