@@ -290,7 +290,13 @@ for (z in 1:nComp){
     make_nice_diffPlot(dds,fullData,configuration,name,ctrst) 
     list_volcanoPlot <- c(list_volcanoPlot,volcano_plot)  
 }
-save(dataMerged, rld, configuration, contrasteList, all_results, txi.rsem, file = "results.RData")
+saveRDS(list("dataMerged" = dataMerged, 
+             "all_results" = all_results,
+             "configuration" = configuration,
+             "contrasteList" = contrasteList,
+             "rld" = rld,
+             "txi.rsem" = txi.rsem),
+        file = "results.rds")
 ```
 
 
