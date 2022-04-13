@@ -1,19 +1,24 @@
-suppressMessages(library(biomaRt))
-suppressMessages(library(tximport))
-suppressMessages(library(readr))
-suppressMessages(library(DESeq2))
-suppressMessages(library(reshape))
-suppressMessages(library(ggplot2))
-suppressMessages(library(RColorBrewer))
-suppressMessages(library(pheatmap))
-suppressMessages(library(ggrepel))
-suppressMessages(library(factoextra))
-suppressMessages(library(rmarkdown))
-suppressMessages(library(limma))
-
-make_nice_boxplot <- function(dds,configuration,projectName) {
+normalization.MatrixFile <- function(dds,ensembl.database,ensembl.attributes,projectName){
   
   countNorm<-counts(dds, normalized=TRUE)
+  ensemblIDs <- row.names(countNorm)
+  
+  IDsWithNamesDesc <- getBM(attributes = ensembl.attributes, 
+                            filters = 'ensembl_gene_id', 
+                            values = ensemblIDs, 
+                            mart = ensembl.database,
+                            useCache = FALSE)
+  
+  rownames(IDsWithNamesDesc) <- make.names(IDsWithNamesDesc$ensembl_gene_id, unique=TRUE)
+  dataMerged <- merge(as.data.frame(countNorm),IDsWithNamesDesc,by="row.names",all.x=TRUE)
+  nameNorm <- paste(projectName,"_deseq2_NormalizedMatrix.tsv",sep="")
+  write.table(dataMerged,file=nameNorm,sep='\t',row.names=F)
+  
+  return(IDsWithNamesDesc)
+  
+}
+
+normalization.boxPlot <- function (countNorm,projectName){
   pseudoNormCount <- as.data.frame(log2(countNorm+1),row.names=row.names(countNorm))
   pseudoNormCount$Ids <- row.names(pseudoNormCount)
   datNorm <- melt(pseudoNormCount, id.vars = "Ids", variable.name = "Samples", value.name = "count")
@@ -30,48 +35,18 @@ make_nice_boxplot <- function(dds,configuration,projectName) {
   gDens <- ggplot(datNorm, aes(x = count, colour = Samples, fill = Samples)) + geom_density(alpha = 0.2, size = 1.25) + facet_wrap(~ Condition) + theme(legend.position = "top") + xlab(expression(log[2](count + 1)))
   ggsave(filename=paste(projectName,"_DensityNormCount.jpg",sep=""), plot=gDens)
   
+  gNorm.name <- paste(projectName,"_boxplotNormCount.jpg",sep="")
   gNorm <- ggplot(data = datNorm, aes(x = Samples, y = count, fill = Condition)) + geom_boxplot() + xlab("Samples") + ylab("log2(Count+1)") + ggtitle("Normalized log2(counts) per sample") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  ggsave(filename="boxplotNormCount.jpg", plot=gNorm)
+  ggsave(filename=gNorm.name, plot=gNorm)
   
+  gRaw.name <- paste(projectName,"_boxplotRawCount.jpg",sep="")
   gRaw <- ggplot(data = datRaw, aes(x = Samples, y = count, fill = Condition)) + geom_boxplot() + xlab("Samples") + ylab("log2(Count+1)") + ggtitle("Raw log2(counts) per sample") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  ggsave(filename="boxplotRawCount.jpg", plot=gRaw)
+  ggsave(filename=gRaw.name, plot=gRaw)
   
+  return(c(gRaw.name,gNorm.name))
 }
 
-make_nice_clusters <- function(rld,configuration,projectName) {
-  distsRL <- dist(t(assay(rld)))
-  matDist <- as.matrix(distsRL)
-  hmcol<- colorRampPalette(brewer.pal(9, 'GnBu'))(100)
-  Conditions <- data.frame(configuration$Condition,row.names=configuration$Name)
-  colnames(Conditions) <- c("condition")
-  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete.png",sep="_")
-  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
-  pheatmap(matDist, 
-           col=hmcol, 
-           annotation_col = Conditions,
-           show_rownames=F,
-           show_colnames=T)
-  dev.off()
-  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete_no-sampleNames.png",sep="_")
-  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
-  pheatmap(matDist, 
-           col=hmcol, 
-           annotation_col = Conditions,
-           show_rownames=F,
-           show_colnames=F)
-  dev.off()
-  
-  png(filename="clustering.png",width=7 ,height=7, units="in",res = 600 ) 
-  pheatmap(matDist, 
-           col=hmcol, 
-           annotation_col = Conditions,
-           show_rownames=F,
-           show_colnames=T)
-  dev.off()
-}
-
-make_nice_pca <- function(dds,rld,projectName) {
-  
+unsupervised.PCA <- function (rld,dds,projectName){
   ntop <- 500
   
   rv <- rowVars(assay(rld))
@@ -85,81 +60,65 @@ make_nice_pca <- function(dds,rld,projectName) {
   PCAdata$condition <- dds$Condition
   
   nameACP1 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes.jpg",sep="")
-  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,col=condition,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
+  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
   ggsave(filename=nameACP1, plot=pca1)
-  ggsave(filename="PCA1.jpg", plot=pca1)
   
   nameACP2 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC2vsPC3_top500varGenes.jpg",sep="")
-  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,col=condition,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
+  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
   ggsave(filename=nameACP2, plot=pca2)
-  ggsave(filename="PCA2.jpg", plot=pca2)
   
   nameACP3 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC3_top500varGenes.jpg",sep="")
-  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,col=condition,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
+  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,label=rownames(PCAdata))) + geom_point(aes(shape=condition, color=condition), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
   ggsave(filename=nameACP3, plot=pca3)
   
-  nameACP_contrib <- paste(projectName,"_deseq2_Unsupervised_PCA_contribution.png",sep="")
-  contrib <- fviz_eig(pc)
-  ggsave(filename=nameACP_contrib, plot=contrib)
+  # nameACP_contrib <- paste(projectName,"_deseq2_Unsupervised_PCA_contribution.png",sep="")
+  # contrib <- fviz_eig(pc)
+  # ggsave(filename=nameACP_contrib, plot=contrib)
   
+  return(c(nameACP1,nameACP2,nameACP3))
 }
 
-make_nice_pca_multifactors <- function(dds,rld,projectName) {
+unsupervised.HC <- function (rld,configuration,projectName){
+  distsRL <- dist(t(assay(rld)))
+  matDist <- as.matrix(distsRL)
+  hmcol<- colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+  Conditions <- data.frame(configuration$Condition,row.names=configuration$Name)
+  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete.png",sep="_")
+  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
+  pheatmap(matDist, 
+           col=hmcol, 
+           annotation_col = Conditions,
+           show_rownames=F,
+           show_colnames=T)
+  dev.off()
   
-  ntop <- 500
-  
-  rv <- rowVars(assay(rld))
-  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
-  mat <- t( assay(rld)[select, ] )
-  pc <- prcomp(mat)
-  eig <- (pc$sdev)^2
-  variance <- eig*100/sum(eig)
-  
-  # Condition 1
-  
-  PCAdata<-as.data.frame(pc$x[,1:3])
-  PCAdata$Patient <- dds$Patient
-  
-  nameACP1 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes_Patient.jpg",sep="")
-  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,col=Patient,label=rownames(PCAdata))) + geom_point(aes(shape=Patient, color=Patient), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
-  ggsave(filename=nameACP1, plot=pca1)
-  nameACP2 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC2vsPC3_top500varGenes_Patient.jpg",sep="")
-  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,col=Patient,label=rownames(PCAdata))) + geom_point(aes(shape=Patient, color=Patient), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP2, plot=pca2)
-  nameACP3 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC3_top500varGenes_Patient.jpg",sep="")
-  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,col=Patient,label=rownames(PCAdata))) + geom_point(aes(shape=Patient, color=Patient), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP3, plot=pca3)
-  
-  # Condition 2
-  
-  PCAdata<-as.data.frame(pc$x[,1:3])
-  PCAdata$Traitement <- dds$Traitement
-  
-  nameACP1 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes_Traitement.jpg",sep="")
-  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,col=Traitement,label=rownames(PCAdata))) + geom_point(aes(shape=Traitement, color=Traitement), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
-  ggsave(filename=nameACP1, plot=pca1)
-  nameACP2 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC2vsPC3_top500varGenes_Traitement.jpg",sep="")
-  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,col=Traitement,label=rownames(PCAdata))) + geom_point(aes(shape=Traitement, color=Traitement), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP2, plot=pca2)
-  nameACP3 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC3_top500varGenes_Traitement.jpg",sep="")
-  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,col=Traitement,label=rownames(PCAdata))) + geom_point(aes(shape=Traitement, color=Traitement), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP3, plot=pca3)
-  
-  # Condition 3
-  
-  PCAdata<-as.data.frame(pc$x[,1:3])
-  PCAdata$Temps <- dds$Temps
-  
-  nameACP1 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes_Temps.jpg",sep="")
-  pca1 <- ggplot(PCAdata,aes(x=PC1,y=PC2,col=Temps,label=rownames(PCAdata))) + geom_point(aes(shape=Temps, color=Temps), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
-  ggsave(filename=nameACP1, plot=pca1)
-  nameACP2 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC2vsPC3_top500varGenes_Temps.jpg",sep="")
-  pca2 <- ggplot(PCAdata,aes(x=PC2,y=PC3,col=Temps,label=rownames(PCAdata))) + geom_point(aes(shape=Temps, color=Temps), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC2: ",round(variance[2],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP2, plot=pca2)
-  nameACP3 <- paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC3_top500varGenes_Temps.jpg",sep="")
-  pca3 <- ggplot(PCAdata,aes(x=PC1,y=PC3,col=Temps,label=rownames(PCAdata))) + geom_point(aes(shape=Temps, color=Temps), size = 5) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC3: ",round(variance[3],1),"% variance"))
-  ggsave(filename=nameACP3, plot=pca3)
-  
+  nameClustering <- paste(projectName,"deseq2_Unsupervised_clustering_euclidean-complete_no-sampleNames.png",sep="_")
+  png(filename=nameClustering,width=7 ,height=7, units="in",res = 600 ) 
+  pheatmap(matDist, 
+           col=hmcol, 
+           annotation_col =  Conditions,
+           show_rownames=F,
+           show_colnames=F)
+  dev.off()
+}
+
+supervised.res <- function (contrasteList,dds,projectName,IDsWithNamesDesc,count.normalized,all_results,z,list_volcanoPlot){
+  ctrst <- unname(unlist(contrasteList[z,]))
+  res <- results(dds, contrast=ctrst)
+  name <- paste(projectName,"deseq2_results_contrast",ctrst[2],'vs',ctrst[3],sep="_")
+  res <- merge(as.data.frame(res),IDsWithNamesDesc,by="row.names",all.x=TRUE)
+  row.names(res)<-res$Row.names
+  res<-res[,2:10]
+  fullData <- merge(as.data.frame(res),count.normalized,by="row.names",all.x=TRUE)
+  row.names(fullData)<-fullData$Row.names
+  fullData<-fullData[order(fullData$padj), ]
+  all_results[[z]] <- fullData
+  names(all_results)[z] <- paste(ctrst[2], "vs", ctrst[3], sep = "_")
+  write.table(as.data.frame(fullData),file=paste(name,".tsv",sep=""),sep='\t',row.names=F)
+  volcano_plot <- make_nice_volcanoPlot(fullData,name,ctrst)
+  make_nice_diffPlot(dds,fullData,configuration,name,ctrst) 
+  list_volcanoPlot <- c(list_volcanoPlot,volcano_plot)
+  return(all_results)
 }
 
 make_nice_volcanoPlot <- function(fullData,name,ctrst) {
@@ -180,16 +139,6 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
   newdata$DEGs[newdata$log2FoldChange < -log2(1.5)] <- "DOWN"
   newdata$DEGs[newdata$log2FoldChange < -log2(1.5) & newdata$padj < 0.05] <- "DOWN & DE"
   
-  # Vérification des valeurs de DEGs et ajustement des couleurs en fonction
-  colorPoints <- c(
-    "DOWN & DE" = "blue3",
-    "UP & DE" = "firebrick2", 
-    "DOWN" = "#CCCCFF", 
-    "UP" = "#FFCCCC",
-    "NO" = "snow3" 
-  )
-  
-  
   nameVolcanoPlot<-paste(name,"_volcanoPlot.png",sep="")
   
   volcanoNoLabel<-ggplot(newdata) +
@@ -203,13 +152,13 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
     theme(plot.title = element_text(hjust = 0.5)) +
     geom_vline(xintercept=c(-log2(1.5), log2(1.5)), col="grey50",linetype=3) + 
     geom_hline(yintercept=-log10(0.05), col="grey50",linetype=3) +
-    scale_color_manual(values = colorPoints,limits = names(colorPoints))
+    scale_color_manual(values=c("#CCCCFF","blue3", "snow3", "#FFCCCC", "firebrick2"))
   
   ggsave(filename=nameVolcanoPlot, plot=volcanoNoLabel)
   
   top10DEG<-newdata[1:10,]
   
-  nameVolcanoPlotTop10<-paste(name,"_volcanoPlot_Top10.png",sep="")
+  nameVolcanoPlot<-paste(name,"_volcanoPlot_Top10.png",sep="")
   
   volcanoTop10<-ggplot(newdata) +
     aes(x = log2FoldChange, y = -log10(padj), colour = DEGs) +
@@ -222,11 +171,10 @@ make_nice_volcanoPlot <- function(fullData,name,ctrst) {
     theme(plot.title = element_text(hjust = 0.5)) +
     geom_vline(xintercept=c(-log2(1.5), log2(1.5)), col="grey50",linetype=3) + 
     geom_hline(yintercept=-log10(0.05), col="grey50",linetype=3) +
-    scale_color_manual(values = colorPoints,limits = names(colorPoints))+
+    scale_color_manual(values=c("#CCCCFF","blue3", "snow3", "#FFCCCC", "firebrick2"))+
     geom_label_repel(data=top10DEG, aes(label=GeneSymbol), color = 'black',show.legend=FALSE)
-  ggsave(filename=nameVolcanoPlotTop10, plot=volcanoTop10)
+  ggsave(filename=nameVolcanoPlot, plot=volcanoTop10)
   
-  return(nameVolcanoPlot)
   
 }
 
@@ -260,30 +208,4 @@ make_nice_diffPlot <- function(dds,fullData,configuration,name,ctrst) {
   
   nameDiffPlot<-paste(name,"_diffPlot_Top10.png",sep="")
   ggsave(filename=nameDiffPlot, plot=diffplot)
-}
-
-make_PCA_noBatchEffect <- function(dds,rld,projectName) {
-
-  #~ 		ACP
-  prepPCArld <- rld
-  assay(prepPCArld) <- limma::removeBatchEffect(assay(prepPCArld), prepPCArld$Preparation)
-  pcaData<-plotPCA(prepPCArld, intgroup=c('Preparation'), returnData=TRUE)
-  ntop <- 500
-  
-  rv <- rowVars(assay(prepPCArld))
-  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
-  mat <- t( assay(rld)[select, ] )
-  pc <- prcomp(mat)
-  eig <- (pc$sdev)^2
-  variance <- eig*100/sum(eig)
-  
-  pcaData$condition <- dds$Condition
-  pcaData$preparation <- dds$Preparation
-  
-  pca1 <- ggplot(pcaData,aes(x=PC1,y=PC2,col=condition,label=name)) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
-  ggsave(filename=paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes_BatchEffectRemoved_Condition-color.png",sep=""), plot=pca1)
-  
-  pca2 <- ggplot(pcaData,aes(x=PC1,y=PC2,col=preparation,label=name)) + geom_point() + geom_label_repel() + xlab(paste0("PC1: ",round(variance[1],1),"% variance")) + ylab(paste0("PC2: ",round(variance[2],1),"% variance"))
-  ggsave(filename=paste(projectName,"_deseq2_Unsupervised_PCA_PC1vsPC2_top500varGenes_BatchEffectRemoved_Preparation-color.png",sep=""), plot=pca2)
-  
 }
