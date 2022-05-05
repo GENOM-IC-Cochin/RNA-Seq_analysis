@@ -113,7 +113,7 @@ supervised.res <- function (contrasteList,dds,projectName,IDsWithNamesDesc,count
   row.names(fullData)<-fullData$Row.names
   fullData<-fullData[order(fullData$padj), ]
   all_results[[z]] <- fullData
-  names(all_results)[z] <- paste(ctrst[2], "vs", ctrst[3], sep = "_")
+  #names(all_results)[z] <- paste(ctrst[2], "vs", ctrst[3], sep = "_")
   write.table(as.data.frame(fullData),file=paste(name,".tsv",sep=""),sep='\t',row.names=F)
   volcano_plot <- make_nice_volcanoPlot(fullData,name,ctrst)
   make_nice_diffPlot(dds,fullData,configuration,name,ctrst) 
