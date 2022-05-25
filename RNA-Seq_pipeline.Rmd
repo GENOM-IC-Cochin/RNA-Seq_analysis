@@ -224,6 +224,13 @@ Les colonnes sont les suivantes:
 
 Un volcan plot est également fourni. Ceux-ci peuvent être modifiés en nous demandant.
 
+# Visualisation
+
+La plateforme met à disposition une application en ligne afin de génerer et modifier vos propres figures, à partir du fichier .rds qui se trouve dans le répertoire R de votre archive de résultats.
+
+Installation pour une utilisation hors Institut Cochin: [SHARE](https://github.com/GENOM-IC-Cochin/shiny-rnaseq-viz)
+
+Accès interne à l'Institut Cochin: [SHARE](10.114.108.67:3200)
 
 # Reproductibilité
 
