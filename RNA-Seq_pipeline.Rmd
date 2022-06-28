@@ -90,7 +90,9 @@ nComp <- nrow(contrasteList)
 ```{r Rawdata, include=FALSE, results="hide"}
 currentDirectory <- getwd()
 # Dans la commande suivante, ajuster le nombre de facteur dans les classes de colonnes
-configuration <- read.table(confFile,header=TRUE,sep="\t",colClasses = c("character","character","factor"))
+configuration_raw <- read.table(confFile,header=TRUE,sep="\t")
+configuration <- configuration_raw
+configuration[, "Condition"] <- factor(configuration[, "Condition"])
 files <- file.path(currentDirectory, configuration$File)
 names(files) <- configuration$Name
 txi.rsem <- tximport(files, type = "rsem", txIn = FALSE, txOut = FALSE)
@@ -122,7 +124,7 @@ for (z in 1:nComp){
 
 saveRDS(list("dataMerged" = dataMerged, 
              "all_results" = all_results,
-             "configuration" = configuration,
+             "configuration" = configuration_raw,
              "contrasteList" = contrasteList,
              "rld" = rld,
              "txi.rsem" = txi.rsem),
