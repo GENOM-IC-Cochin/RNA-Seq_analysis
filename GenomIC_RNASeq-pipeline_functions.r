@@ -8,7 +8,7 @@ normalization.MatrixFile <- function(dds,ensembl.database,ensembl.attributes,pro
                             values = ensemblIDs, 
                             mart = ensembl.database,
                             useCache = FALSE)
-  
+  IDsWithNamesDesc %<>% mutate(across(everything(), na_if, ""))
   rownames(IDsWithNamesDesc) <- make.names(IDsWithNamesDesc$ensembl_gene_id, unique=TRUE)
   dataMerged <- merge(as.data.frame(countNorm),IDsWithNamesDesc,by="row.names",all.x=TRUE)
   nameNorm <- paste(projectName,"_deseq2_NormalizedMatrix.tsv",sep="")
