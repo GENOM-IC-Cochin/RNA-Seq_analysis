@@ -93,6 +93,7 @@ currentDirectory <- getwd()
 configuration_raw <- read.table(confFile,header=TRUE,sep="\t")
 configuration <- configuration_raw
 configuration[, "Condition"] <- factor(configuration[, "Condition"])
+configuration[, "Name"] <- as.character(configuration[, "Name"])
 files <- file.path(currentDirectory, configuration$File)
 names(files) <- configuration$Name
 txi.rsem <- tximport(files, type = "rsem", txIn = FALSE, txOut = FALSE)
