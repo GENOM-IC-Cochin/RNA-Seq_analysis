@@ -8,6 +8,12 @@ bibliography: biblio.bib
 nocite: '@*'
 ---
 
+```{r Fonctions et packages, include=FALSE, results="hide"}
+renv::init(bioconductor = TRUE)
+source("GenomIC_RNASeq-pipeline_functions.r")
+source("GenomIC_RNASeq-pipeline_packages.r")
+```
+
 ## Logiciels et références
 
 Le pipeline de la plateforme utilise STAR (v2.7.6a) et RSEM (v1.3.1). Les résultats de comptage brut sont fournis par RSEM et exploités à l'aide du package R DESeq2.
@@ -52,6 +58,7 @@ Les fichiers de séquences (fasta) et d'annotations (gtf) sont disponibles sur c
 knitr::include_graphics("QC_STAR.png")
 ``` 
 Les colonnes sont les suivantes:
+
 * Input: nombre de lectures issues du séquençage, par échantillon
 * UniquelyMapped: Pourcentage de lectures alignées de façon unique sur le génome de référence
 * MultipleMapped_upTo10: Pourcentages de lectures alignées sur n loci, n entre 2 et 10. Ces lectures sont néanmoins conservées lors de l'analyse gtâce à l'algorithme de RSEM.
@@ -59,24 +66,18 @@ Les colonnes sont les suivantes:
 * Unmapped_tooShort: Pourcentage de lectures qui se sont alignées sur moins de 60% de leur taille. Elles sont éliminées de l'analyse.
 * Unmapped_other: Pourcentage de lecture non-alignées et éliminées de l'analyse.
 
-L'ensemble de vos échantillons présentent de très bons contrôles qualités. Nous les validons et les prenons en compte pour la suite de l'analyse.
-
 # Analyses avec R
-
-```{r Fonctions et packages, include=FALSE, results="hide"}
-renv::restore()
-source("GenomIC_RNASeq-pipeline_functions.r")
-source("GenomIC_RNASeq-pipeline_packages.r")
-```
 
 ```{r biomaRt, include=FALSE, results="hide"}
 # Human
 ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 101)
-ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description','go_id','name_1006')
+# ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description','go_id','name_1006')
+ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description')
 
 # Mouse
 # ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "mmusculus_gene_ensembl", version = 101)
 # ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description','go_id','name_1006')
+# ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description')
 ```
 
 ```{r Configuration, include=FALSE, results="hide"}
@@ -158,9 +159,6 @@ Attention! Ces données ne peuvent pas être utlisées pour comparer des express
 knitr::include_graphics(list_boxplot)
 ``` 
 
-Une fois les données normalisées, nous validons l'absence de profil atypique qui pourrait entrainer la suppression d'un ou plusieurs échantillons.
-
-
 ## Analyses non supervisées
 
 ### ACP
@@ -186,7 +184,7 @@ knitr::include_graphics(list_PCA)
            show_colnames=T)
 ```
   
-Le clustering hérarchique présente des résultats cohérents avec les ACP présentées précédement. Nous avons utlisés la distance euclidienne et la méthode complète pour déterminer le dendogramme. Il est possible de changer les méthodes en nous contactant.
+Nous avons utlisés la distance euclidienne et la méthode complète pour déterminer le dendogramme. Il est possible de changer les méthodes en nous contactant.
 
 
 ## Analyses supervisées
@@ -230,9 +228,9 @@ Un volcan plot est également fourni. Ceux-ci peuvent être modifiés en nous de
 
 La plateforme met à disposition une application en ligne afin de génerer et modifier vos propres figures, à partir du fichier .rds qui se trouve dans le répertoire R de votre archive de résultats.
 
-Installation pour une utilisation hors Institut Cochin: [SHARE](https://github.com/GENOM-IC-Cochin/shiny-rnaseq-viz)
+Installation pour une utilisation hors Institut Cochin: [RADISH](https://github.com/GENOM-IC-Cochin/shiny-rnaseq-viz)
 
-Accès interne à l'Institut Cochin: [SHARE](10.114.108.67:3200)
+Accès interne à l'Institut Cochin: [RADISH](10.114.108.67:3200)
 
 # Reproductibilité
 
