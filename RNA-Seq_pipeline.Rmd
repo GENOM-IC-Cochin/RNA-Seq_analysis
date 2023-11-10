@@ -12,6 +12,16 @@ nocite: '@*'
 renv::init(bioconductor = TRUE)
 source("GenomIC_RNASeq-pipeline_functions.r")
 source("GenomIC_RNASeq-pipeline_packages.r")
+
+# Human
+ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 101)
+# ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description','go_id','name_1006')
+ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description')
+
+# Mouse
+# ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "mmusculus_gene_ensembl", version = 101)
+# ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description','go_id','name_1006')
+# ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description')
 ```
 
 ## Logiciels et références
@@ -47,6 +57,7 @@ rsem-calculate-expression
 Pour votre projet, nous avons utilisé la référence suivante:
 
 [> Ensembl release 101, "ref_name"](http://aug2020.archive.ensembl.org/index.html)
+[> Ensembl release 109, "ref_name"](http://feb2023.archive.ensembl.org/index.html)
 
 Les fichiers de séquences (fasta) et d'annotations (gtf) sont disponibles sur cette base de données. Merci de faire attention à la version utilisée dans le cadre d'une réanalyse complète des données ou d'une comparaison avec d'autres données.
 
@@ -68,19 +79,7 @@ Les colonnes sont les suivantes:
 
 # Analyses avec R
 
-```{r biomaRt, include=FALSE, results="hide"}
-# Human
-ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 101)
-# ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description','go_id','name_1006')
-ensembl.attributes <- c('ensembl_gene_id', 'hgnc_symbol','description')
-
-# Mouse
-# ensembl.database <- useEnsembl(biomart = "ensembl", dataset = "mmusculus_gene_ensembl", version = 101)
-# ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description','go_id','name_1006')
-# ensembl.attributes <- c('ensembl_gene_id', 'mgi_symbol','description')
-```
-
-```{r Configuration, include=FALSE, results="hide"}
+```{r, include=FALSE, results="hide"}
 confFile <- "PROJET.conf"
 contrastFile <- "PROJET.contrastes"
 projectName <- "NGSxx-xxx_ensemblxxx"
@@ -88,7 +87,7 @@ contrasteList <- read.table(contrastFile,header=FALSE,sep="\t",colClasses = c("c
 nComp <- nrow(contrasteList)
 ```
 
-```{r Rawdata, include=FALSE, results="hide"}
+```{r, include=FALSE, results="hide"}
 currentDirectory <- getwd()
 # Dans la commande suivante, ajuster le nombre de facteur dans les classes de colonnes
 configuration_raw <- read.table(confFile,header=TRUE,sep="\t")
@@ -98,18 +97,14 @@ files <- file.path(currentDirectory, configuration$File)
 names(files) <- configuration$Name
 txi.rsem <- tximport(files, type = "rsem", txIn = FALSE, txOut = FALSE)
 txi.rsem$length <- ifelse(txi.rsem$length==0,1,txi.rsem$length) # Setting the length to 1, to avoid error for the dds object
-```
 
-```{r DDS, include=FALSE, results="hide"}
 dds <- DESeqDataSetFromTximport(txi.rsem, configuration, ~ Condition)
 dds <- estimateSizeFactors(dds)
 idx <- rowSums( counts(dds, normalized=TRUE) >= 10 ) >= 3
 dds <- dds[idx,]
 dds <- DESeq(dds)
 summary(dds)
-```
 
-```{r Pipeline, include=FALSE, results="hide"}
 IDsWithNamesDesc <- normalization.MatrixFile(dds,ensembl.database,ensembl.attributes,projectName)
 count.normalized <-counts(dds, normalized=TRUE)
 dataMerged <- merge(as.data.frame(count.normalized),IDsWithNamesDesc,by="row.names",all.x=TRUE)
@@ -129,7 +124,7 @@ saveRDS(list("dataMerged" = dataMerged,
              "contrasteList" = contrasteList,
              "rld" = rld,
              "txi.rsem" = txi.rsem),
-        file = "results.rds")
+        file = paste0(projectName,"_results.rds"))
 
 ```
 
@@ -171,7 +166,7 @@ knitr::include_graphics(list_PCA)
 
 ### Clustering
 
-```{r clustering, out.width="49%", out.height="20%",fig.cap="Clustering hiérarchique",fig.show='hold',fig.align='center'}
+```{r, out.width="49%", out.height="20%",fig.cap="Clustering hiérarchique",fig.show='hold',fig.align='center'}
   distsRL <- dist(t(assay(rld)))
   matDist <- as.matrix(distsRL)
   hmcol<- colorRampPalette(brewer.pal(9, 'GnBu'))(100)
