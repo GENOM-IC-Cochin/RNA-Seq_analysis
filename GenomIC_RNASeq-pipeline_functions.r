@@ -104,7 +104,7 @@ unsupervised.HC <- function (rld,configuration,projectName){
 
 supervised.res <- function (contrasteList,dds,projectName,IDsWithNamesDesc,count.normalized,all_results,z,list_volcanoPlot){
   ctrst <- unname(unlist(contrasteList[z,]))
-  res <- results(dds, contrast=ctrst)
+  res <- results(dds, contrast=ctrst,alpha=0.05)
   name <- paste(projectName,"deseq2_results_contrast",ctrst[2],'vs',ctrst[3],sep="_")
   res <- merge(as.data.frame(res),IDsWithNamesDesc,by="row.names",all.x=TRUE)
   row.names(res)<-res$Row.names
@@ -114,6 +114,8 @@ supervised.res <- function (contrasteList,dds,projectName,IDsWithNamesDesc,count
   fullData<-fullData[order(fullData$padj), ]
   all_results[[z]] <- fullData
   #names(all_results)[z] <- paste(ctrst[2], "vs", ctrst[3], sep = "_")
+  total_tests <- nrow(fullData)
+  fullData$pdaj.bonferroni <- p.adjust(fullData$pvalue, method = "bonferroni", n = total_tests)
   write.table(as.data.frame(fullData),file=paste(name,".tsv",sep=""),sep='\t',row.names=F)
   volcano_plot <- make_nice_volcanoPlot(fullData,name,ctrst)
   make_nice_diffPlot(dds,fullData,configuration,name,ctrst) 
